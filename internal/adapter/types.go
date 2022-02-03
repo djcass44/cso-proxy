@@ -18,8 +18,8 @@
 package adapter
 
 import (
+	"github.com/djcass44/cso-proxy/internal/adapter/harbor"
 	"github.com/quay/container-security-operator/secscan/quay"
-	"gitlab.com/av1o/cso-proxy/internal/adapter/harbor"
 	"net/http"
 	"net/url"
 )

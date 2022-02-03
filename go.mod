@@ -1,4 +1,4 @@
-module gitlab.com/av1o/cso-proxy
+module github.com/djcass44/cso-proxy
 
 go 1.17
 

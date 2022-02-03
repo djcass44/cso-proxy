@@ -18,12 +18,12 @@
 package main
 
 import (
+	"github.com/djcass44/cso-proxy/internal/adapter"
+	"github.com/djcass44/cso-proxy/internal/api"
 	"github.com/gorilla/mux"
 	"github.com/kelseyhightower/envconfig"
 	log "github.com/sirupsen/logrus"
 	"gitlab.com/autokubeops/serverless"
-	"gitlab.com/av1o/cso-proxy/internal/adapter"
-	"gitlab.com/av1o/cso-proxy/internal/api"
 	"net/http"
 )
 

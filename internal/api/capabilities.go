@@ -18,8 +18,8 @@
 package api
 
 import (
+	"github.com/djcass44/cso-proxy/internal/adapter"
 	"github.com/djcass44/go-utils/pkg/httputils"
-	"gitlab.com/av1o/cso-proxy/internal/adapter"
 	"net/http"
 )
 
