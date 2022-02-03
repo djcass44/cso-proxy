@@ -21,13 +21,13 @@ func main() {
 		return
 	}
 
-	// setup caps
-	manifest := api.NewCapabilities(adapter.NewRegistry())
-
-	router := mux.NewRouter()
+	router := mux.NewRouter().UseEncodedPath()
 	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK"))
 	}).Methods(http.MethodGet)
+
+	// setup caps
+	manifest := api.NewCapabilities(adapter.NewHarborAdapter(router))
 
 	// app paths
 	router.Handle("/.well-known/app-capabilities", manifest).
