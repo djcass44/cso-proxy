@@ -15,24 +15,30 @@
  *
  */
 
-package api
+package adapter
 
 import (
-	"github.com/djcass44/go-utils/pkg/httputils"
-	"gitlab.com/av1o/cso-proxy/internal/adapter"
-	"net/http"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type Capabilities struct {
-	dst adapter.Adapter
-}
-
-func NewCapabilities(dst adapter.Adapter) *Capabilities {
-	return &Capabilities{
-		dst: dst,
+func TestFirst(t *testing.T) {
+	var cases = []struct {
+		in  []string
+		out string
+	}{
+		{
+			[]string{"a", "b"},
+			"a",
+		},
+		{
+			nil,
+			"",
+		},
 	}
-}
-
-func (c *Capabilities) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	httputils.ReturnJSON(w, http.StatusOK, c.dst.Capabilities(r.URL))
+	for _, tt := range cases {
+		t.Run(tt.out, func(t *testing.T) {
+			assert.EqualValues(t, tt.out, first(tt.in))
+		})
+	}
 }
