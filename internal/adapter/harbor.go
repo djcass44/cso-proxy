@@ -31,6 +31,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"time"
 )
 
@@ -39,7 +40,11 @@ type Harbor struct{}
 func NewHarborAdapter(router *mux.Router) *Harbor {
 	h := new(Harbor)
 
+	router.HandleFunc("/cso/v1/repository/{registry}/{namespace}/{reponame}/manifest/{digest}/security", h.ManifestSecurity).
+		Methods(http.MethodGet)
 	router.HandleFunc("/cso/v1/repository/{namespace}/{reponame}/manifest/{digest}/security", h.ManifestSecurity).
+		Methods(http.MethodGet)
+	router.HandleFunc("/cso/v1/repository/{registry}/{namespace}/{reponame}/image/{imageid}/security", h.ImageSecurity).
 		Methods(http.MethodGet)
 	router.HandleFunc("/cso/v1/repository/{namespace}/{reponame}/image/{imageid}/security", h.ImageSecurity).
 		Methods(http.MethodGet)
@@ -72,15 +77,20 @@ func (*Harbor) Capabilities(uri *url.URL) *quay.AppCapabilities {
 }
 
 func (h *Harbor) ManifestSecurity(w http.ResponseWriter, r *http.Request) {
+	features, vulnerabilities := r.URL.Query().Get("features") == "true", r.URL.Query().Get("vulnerabilities") == "true"
 	vars := mux.Vars(r)
-	namespace, reponame, digest := vars["namespace"], vars["reponame"], vars["digest"]
+	registry, namespace, reponame, digest := vars["registry"], vars["namespace"], vars["reponame"], vars["digest"]
 	log.WithContext(r.Context()).WithFields(log.Fields{
+		"registry":  registry,
 		"namespace": namespace,
 		"reponame":  reponame,
 		"digest":    digest,
 	}).Infof("fetching manifest information")
 	uri := fmt.Sprintf("%s://%s", r.URL.Scheme, r.URL.Host)
-	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, digest)
+	if registry != "" {
+		namespace = filepath.Join(registry, namespace)
+	}
+	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, digest, features, vulnerabilities)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -89,15 +99,20 @@ func (h *Harbor) ManifestSecurity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Harbor) ImageSecurity(w http.ResponseWriter, r *http.Request) {
+	features, vulnerabilities := r.URL.Query().Get("features") == "true", r.URL.Query().Get("vulnerabilities") == "true"
 	vars := mux.Vars(r)
-	namespace, reponame, imageid := vars["namespace"], vars["reponame"], vars["imageid"]
+	registry, namespace, reponame, imageid := vars["registry"], vars["namespace"], vars["reponame"], vars["imageid"]
 	log.WithContext(r.Context()).WithFields(log.Fields{
+		"registry":  registry,
 		"namespace": namespace,
 		"reponame":  reponame,
 		"imageid":   imageid,
 	}).Infof("fetching image information")
+	if registry != "" {
+		namespace = filepath.Join(registry, namespace)
+	}
 	uri := fmt.Sprintf("%s://%s", r.URL.Scheme, r.URL.Host)
-	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, imageid)
+	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, imageid, features, vulnerabilities)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -105,7 +120,7 @@ func (h *Harbor) ImageSecurity(w http.ResponseWriter, r *http.Request) {
 	httputils.ReturnJSON(w, http.StatusOK, report)
 }
 
-func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string) (*secscan.Response, error) {
+func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string, showFeatures, showVulnerabilities bool) (*secscan.Response, error) {
 	target := fmt.Sprintf("%s/api/v2.0/projects/%s/repositories/%s/artifacts/%s/additions/vulnerabilities", uri, namespace, repository, reference)
 	log.WithContext(ctx).Infof("targeting url: %s", target)
 	// prep the request
@@ -154,17 +169,25 @@ func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository
 			})
 		}
 	}
-	var features []*secscan.Feature
+	//goland:noinspection GoPreferNilSlice
+	features := []*secscan.Feature{}
 	for k, v := range packages {
+		if !showFeatures {
+			continue
+		}
 		name, version, _ := net.SplitHostPort(k)
-		features = append(features, &secscan.Feature{
+		f := &secscan.Feature{
 			Name:            name,
 			NamespaceName:   "",
 			VersionFormat:   "",
 			Version:         version,
 			Vulnerabilities: v,
 			AddedBy:         "",
-		})
+		}
+		if !showVulnerabilities {
+			f.Vulnerabilities = []*secscan.Vulnerability{}
+		}
+		features = append(features, f)
 	}
 	return &secscan.Response{
 		Status: "scanned",
