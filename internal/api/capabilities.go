@@ -34,5 +34,11 @@ func NewCapabilities(dst adapter.Adapter) *Capabilities {
 }
 
 func (c *Capabilities) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	httputils.ReturnJSON(w, http.StatusOK, c.dst.Capabilities(r.URL))
+	uri := r.URL
+	uri.Host = r.Host
+	// assume the scheme is HTTPS
+	if uri.Scheme == "" {
+		uri.Scheme = "https"
+	}
+	httputils.ReturnJSON(w, http.StatusOK, c.dst.Capabilities(uri))
 }

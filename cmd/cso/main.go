@@ -20,6 +20,7 @@ package main
 import (
 	"github.com/djcass44/cso-proxy/internal/adapter"
 	"github.com/djcass44/cso-proxy/internal/api"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/kelseyhightower/envconfig"
 	log "github.com/sirupsen/logrus"
@@ -39,6 +40,7 @@ func main() {
 	}
 
 	router := mux.NewRouter().UseEncodedPath()
+	router.Use(handlers.ProxyHeaders)
 	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK"))
 	}).Methods(http.MethodGet)
