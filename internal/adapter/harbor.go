@@ -86,7 +86,7 @@ func (h *Harbor) ManifestSecurity(w http.ResponseWriter, r *http.Request) {
 		"reponame":  reponame,
 		"digest":    digest,
 	}).Infof("fetching manifest information")
-	uri := fmt.Sprintf("%s://%s", r.URL.Scheme, r.URL.Host)
+	uri := fmt.Sprintf("https://%s", r.Host)
 	if registry != "" {
 		namespace = filepath.Join(registry, namespace)
 	}
@@ -111,7 +111,7 @@ func (h *Harbor) ImageSecurity(w http.ResponseWriter, r *http.Request) {
 	if registry != "" {
 		namespace = filepath.Join(registry, namespace)
 	}
-	uri := fmt.Sprintf("%s://%s", r.URL.Scheme, r.URL.Host)
+	uri := fmt.Sprintf("https://%s", r.Host)
 	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, imageid, features, vulnerabilities)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
