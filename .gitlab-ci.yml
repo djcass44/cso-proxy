@@ -3,6 +3,7 @@ variables:
   BUILD_KANIKO_DISABLED: "true"
   BP_OCI_SOURCE: https://github.com/djcass44/cso-proxy
   BP_OCI_TITLE: "CSO Proxy"
+  DEPLOY_DISABLED: "true"
 
 container-scanning:
   needs:
