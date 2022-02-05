@@ -87,7 +87,6 @@ func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository
 		log.WithError(err).WithContext(ctx).Error("failed to prepare request")
 		return nil, http.StatusInternalServerError, err
 	}
-	req.Header.Set("X-Accept-Vulnerabilities", "application/vnd.security.vulnerability.report; version=1.1")
 	// execute the request
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
