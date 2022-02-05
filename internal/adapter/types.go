@@ -18,16 +18,22 @@
 package adapter
 
 import (
+	"context"
 	"github.com/djcass44/cso-proxy/internal/adapter/harbor"
+	"github.com/quay/container-security-operator/secscan"
 	"github.com/quay/container-security-operator/secscan/quay"
-	"net/http"
 	"net/url"
 )
 
 type Adapter interface {
 	Capabilities(uri *url.URL) *quay.AppCapabilities
-	ManifestSecurity(w http.ResponseWriter, r *http.Request)
-	ImageSecurity(w http.ResponseWriter, r *http.Request)
+	ManifestSecurity(ctx context.Context, path, digest string, opts Opts) (*secscan.Response, int, error)
+}
+
+type Opts struct {
+	URI             string
+	Features        bool
+	Vulnerabilities bool
 }
 
 type HarborScan map[string]harbor.Report

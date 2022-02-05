@@ -46,10 +46,15 @@ func main() {
 	}).Methods(http.MethodGet)
 
 	// setup caps
-	manifest := api.NewCapabilities(adapter.NewHarborAdapter(router))
+	dst := adapter.NewHarborAdapter()
+	manifest := api.NewCapabilities(dst)
+	middleware := api.NewMiddleware(dst)
 
 	// app paths
 	router.Handle("/.well-known/app-capabilities", manifest).
+		Methods(http.MethodGet)
+	router.PathPrefix("/cso/v1/repository/").
+		Handler(middleware).
 		Methods(http.MethodGet)
 
 	serverless.NewBuilder(router).

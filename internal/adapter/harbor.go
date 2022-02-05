@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"github.com/djcass44/cso-proxy/internal/adapter/harbor"
 	"github.com/djcass44/go-utils/pkg/httputils"
-	"github.com/gorilla/mux"
 	"github.com/quay/container-security-operator/secscan"
 	"github.com/quay/container-security-operator/secscan/quay"
 	log "github.com/sirupsen/logrus"
@@ -31,23 +30,14 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"strings"
 	"time"
 )
 
 type Harbor struct{}
 
-func NewHarborAdapter(router *mux.Router) *Harbor {
+func NewHarborAdapter() *Harbor {
 	h := new(Harbor)
-
-	router.HandleFunc("/cso/v1/repository/{registry}/{namespace}/{reponame}/manifest/{digest}/security", h.ManifestSecurity).
-		Methods(http.MethodGet)
-	router.HandleFunc("/cso/v1/repository/{namespace}/{reponame}/manifest/{digest}/security", h.ManifestSecurity).
-		Methods(http.MethodGet)
-	router.HandleFunc("/cso/v1/repository/{registry}/{namespace}/{reponame}/image/{imageid}/security", h.ImageSecurity).
-		Methods(http.MethodGet)
-	router.HandleFunc("/cso/v1/repository/{namespace}/{reponame}/image/{imageid}/security", h.ImageSecurity).
-		Methods(http.MethodGet)
 
 	return h
 }
@@ -70,56 +60,22 @@ func (*Harbor) Capabilities(uri *url.URL) *quay.AppCapabilities {
 			ImageSecurity: struct {
 				RestApiTemplate string `json:"rest-api-template"`
 			}{
-				RestApiTemplate: fmt.Sprintf("%s/cso/v1/repository/{namespace}/{reponame}/image/{imageid}/security", appURL),
+				RestApiTemplate: "",
 			},
 		},
 	}
 }
 
-func (h *Harbor) ManifestSecurity(w http.ResponseWriter, r *http.Request) {
-	features, vulnerabilities := r.URL.Query().Get("features") == "true", r.URL.Query().Get("vulnerabilities") == "true"
-	vars := mux.Vars(r)
-	registry, namespace, reponame, digest := vars["registry"], vars["namespace"], vars["reponame"], vars["digest"]
-	log.WithContext(r.Context()).WithFields(log.Fields{
-		"registry":  registry,
+func (h *Harbor) ManifestSecurity(ctx context.Context, path, digest string, opts Opts) (*secscan.Response, int, error) {
+	bits := strings.SplitN(path, "/", 2)
+	namespace, reponame := bits[0], bits[1]
+	log.WithContext(ctx).WithFields(log.Fields{
 		"namespace": namespace,
 		"reponame":  reponame,
 		"digest":    digest,
 	}).Infof("fetching manifest information")
-	uri := fmt.Sprintf("https://%s", r.Host)
-	if registry != "" {
-		reponame = url.PathEscape(filepath.Join(namespace, reponame))
-		namespace = registry
-	}
-	report, code, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, digest, features, vulnerabilities)
-	if err != nil {
-		http.Error(w, err.Error(), code)
-		return
-	}
-	httputils.ReturnJSON(w, code, report)
-}
-
-func (h *Harbor) ImageSecurity(w http.ResponseWriter, r *http.Request) {
-	features, vulnerabilities := r.URL.Query().Get("features") == "true", r.URL.Query().Get("vulnerabilities") == "true"
-	vars := mux.Vars(r)
-	registry, namespace, reponame, imageid := vars["registry"], vars["namespace"], vars["reponame"], vars["imageid"]
-	log.WithContext(r.Context()).WithFields(log.Fields{
-		"registry":  registry,
-		"namespace": namespace,
-		"reponame":  reponame,
-		"imageid":   imageid,
-	}).Infof("fetching image information")
-	if registry != "" {
-		reponame = url.PathEscape(filepath.Join(namespace, reponame))
-		namespace = registry
-	}
-	uri := fmt.Sprintf("https://%s", r.Host)
-	report, code, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, imageid, features, vulnerabilities)
-	if err != nil {
-		http.Error(w, err.Error(), code)
-		return
-	}
-	httputils.ReturnJSON(w, code, report)
+	reponame = url.PathEscape(reponame)
+	return h.vulnerabilityInfo(ctx, opts.URI, namespace, reponame, digest, opts.Features, opts.Vulnerabilities)
 }
 
 func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string, showFeatures, showVulnerabilities bool) (*secscan.Response, int, error) {
