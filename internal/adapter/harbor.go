@@ -91,12 +91,12 @@ func (h *Harbor) ManifestSecurity(w http.ResponseWriter, r *http.Request) {
 		reponame = url.PathEscape(filepath.Join(namespace, reponame))
 		namespace = registry
 	}
-	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, digest, features, vulnerabilities)
+	report, code, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, digest, features, vulnerabilities)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), code)
 		return
 	}
-	httputils.ReturnJSON(w, http.StatusOK, report)
+	httputils.ReturnJSON(w, code, report)
 }
 
 func (h *Harbor) ImageSecurity(w http.ResponseWriter, r *http.Request) {
@@ -114,22 +114,22 @@ func (h *Harbor) ImageSecurity(w http.ResponseWriter, r *http.Request) {
 		namespace = registry
 	}
 	uri := fmt.Sprintf("https://%s", r.Host)
-	report, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, imageid, features, vulnerabilities)
+	report, code, err := h.vulnerabilityInfo(r.Context(), uri, namespace, reponame, imageid, features, vulnerabilities)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), code)
 		return
 	}
-	httputils.ReturnJSON(w, http.StatusOK, report)
+	httputils.ReturnJSON(w, code, report)
 }
 
-func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string, showFeatures, showVulnerabilities bool) (*secscan.Response, error) {
+func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string, showFeatures, showVulnerabilities bool) (*secscan.Response, int, error) {
 	target := fmt.Sprintf("%s/api/v2.0/projects/%s/repositories/%s/artifacts/%s/additions/vulnerabilities", uri, namespace, repository, reference)
 	log.WithContext(ctx).Infof("targeting url: %s", target)
 	// prep the request
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		log.WithError(err).WithContext(ctx).Error("failed to prepare request")
-		return nil, err
+		return nil, http.StatusInternalServerError, err
 	}
 	req.Header.Set("X-Accept-Vulnerabilities", "application/vnd.security.vulnerability.report; version=1.1")
 	// execute the request
@@ -137,24 +137,24 @@ func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.WithError(err).WithContext(ctx).Error("failed to execute request")
-		return nil, err
+		return nil, http.StatusInternalServerError, err
 	}
 	defer resp.Body.Close()
 	log.WithContext(ctx).Infof("registry responded with status: %s in %s", resp.Status, time.Since(start))
 	// handle errors
 	if httputils.IsHTTPError(resp.StatusCode) {
 		log.WithContext(ctx).Warningf("request failed with code: %d", resp.StatusCode)
-		return nil, fmt.Errorf("request failed: %s", resp.Status)
+		return nil, resp.StatusCode, fmt.Errorf("request failed: %s", resp.Status)
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.WithError(err).WithContext(ctx).Error("failed to read response body")
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
 	var report harbor.Response
 	if err := json.Unmarshal(body, &report); err != nil {
 		log.WithError(err).WithContext(ctx).Error("failed to unmarshal response")
-		return nil, err
+		return nil, http.StatusInternalServerError, err
 	}
 	packages := map[string][]*secscan.Vulnerability{}
 	for k, v := range report {
@@ -198,7 +198,7 @@ func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository
 				Features: features,
 			},
 		},
-	}, nil
+	}, http.StatusOK, nil
 }
 
 func first(s []string) string {
