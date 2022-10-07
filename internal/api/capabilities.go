@@ -20,6 +20,7 @@ package api
 import (
 	"github.com/djcass44/cso-proxy/internal/adapter"
 	"github.com/djcass44/go-utils/utilities/httputils"
+	"go.opentelemetry.io/otel"
 	"net/http"
 )
 
@@ -34,11 +35,13 @@ func NewCapabilities(dst adapter.Adapter) *Capabilities {
 }
 
 func (c *Capabilities) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("").Start(r.Context(), "capabilities_serveHTTP")
+	defer span.End()
 	uri := r.URL
 	uri.Host = r.Host
 	// assume the scheme is HTTPS
 	if uri.Scheme == "" {
 		uri.Scheme = "https"
 	}
-	httputils.ReturnJSON(r.Context(), w, http.StatusOK, c.dst.Capabilities(uri))
+	httputils.ReturnJSON(ctx, w, http.StatusOK, c.dst.Capabilities(uri))
 }

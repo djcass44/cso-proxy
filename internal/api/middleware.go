@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"github.com/djcass44/cso-proxy/internal/adapter"
 	"github.com/djcass44/go-utils/utilities/httputils"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"net/http"
 	"regexp"
 	"strings"
@@ -39,14 +41,20 @@ func NewMiddleware(dst adapter.Adapter) *Middleware {
 }
 
 func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("").Start(r.Context(), "middleware_serveHTTP")
+	defer span.End()
 	if !ManifestRegex.MatchString(r.URL.Path) {
 		http.NotFound(w, r)
 		return
 	}
 	features, vulnerabilities := r.URL.Query().Get("features") == "true", r.URL.Query().Get("vulnerabilities") == "true"
+	span.SetAttributes(
+		attribute.Bool("features", features),
+		attribute.Bool("vulnerabilities", vulnerabilities),
+	)
 	path := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/cso/v1/repository/"), "/manifest/", 2)[0]
 	digest := ManifestRegex.FindStringSubmatch(r.URL.Path)[2]
-	resp, code, err := m.dst.ManifestSecurity(r.Context(), path, digest, adapter.Opts{
+	resp, code, err := m.dst.ManifestSecurity(ctx, path, digest, adapter.Opts{
 		URI:             fmt.Sprintf("https://%s", r.Host),
 		Features:        features,
 		Vulnerabilities: vulnerabilities,
@@ -55,5 +63,5 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	httputils.ReturnJSON(r.Context(), w, code, resp)
+	httputils.ReturnJSON(ctx, w, code, resp)
 }

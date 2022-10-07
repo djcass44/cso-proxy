@@ -21,6 +21,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/djcass44/cso-proxy/internal/adapter"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/testr"
 	"github.com/quay/container-security-operator/secscan"
 	"github.com/quay/container-security-operator/secscan/quay"
 	"github.com/stretchr/testify/assert"
@@ -44,6 +46,7 @@ func (t testAdapter) ManifestSecurity(context.Context, string, string, adapter.O
 }
 
 func TestMiddleware_ServeHTTP(t *testing.T) {
+	ctx := logr.NewContext(context.TODO(), testr.NewWithOptions(t, testr.Options{Verbosity: 10}))
 	var cases = []struct {
 		path string
 		code int
@@ -65,7 +68,7 @@ func TestMiddleware_ServeHTTP(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			m.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("https://example.org%s", tt.path), nil))
+			m.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("https://example.org%s", tt.path), nil).WithContext(ctx))
 			assert.EqualValues(t, tt.code, w.Code)
 		})
 	}

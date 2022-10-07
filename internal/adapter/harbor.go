@@ -26,6 +26,9 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/quay/container-security-operator/secscan"
 	"github.com/quay/container-security-operator/secscan/quay"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"net"
 	"net/http"
@@ -67,6 +70,8 @@ func (*Harbor) Capabilities(uri *url.URL) *quay.AppCapabilities {
 }
 
 func (h *Harbor) ManifestSecurity(ctx context.Context, path, digest string, opts Opts) (*secscan.Response, int, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "adapter_manifestSecurity", trace.WithAttributes(attribute.String("adapter", "harbor")))
+	defer span.End()
 	log := logr.FromContextOrDiscard(ctx).WithValues("Path", path, "Digest", digest)
 	bits := strings.SplitN(path, "/", 2)
 	namespace, reponame := bits[0], bits[1]
@@ -76,6 +81,8 @@ func (h *Harbor) ManifestSecurity(ctx context.Context, path, digest string, opts
 }
 
 func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string, showFeatures, showVulnerabilities bool) (*secscan.Response, int, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "adapter_vulnerabilityInfo", trace.WithAttributes(attribute.String("adapter", "harbor")))
+	defer span.End()
 	log := logr.FromContextOrDiscard(ctx).WithValues("Namespace", namespace, "Repository", repository, "Reference", reference)
 	target := fmt.Sprintf("%s/api/v2.0/projects/%s/repositories/%s/artifacts/%s/additions/vulnerabilities", uri, namespace, repository, reference)
 	log.Info("targeting URL", "URL", target)
