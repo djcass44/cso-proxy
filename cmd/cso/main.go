@@ -22,6 +22,8 @@ import (
 	"github.com/djcass44/cso-proxy/internal/adapter"
 	"github.com/djcass44/cso-proxy/internal/api"
 	"github.com/djcass44/go-utils/logging"
+	"github.com/djcass44/go-utils/otel"
+	"github.com/djcass44/go-utils/otel/metrics"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/kelseyhightower/envconfig"
@@ -29,11 +31,17 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"net/http"
+	"os"
 )
 
 type environment struct {
 	Port     int `envconfig:"PORT" default:"8080"`
 	LogLevel int `split_words:"true"`
+
+	Otel struct {
+		Enabled    bool    `split_words:"true"`
+		SampleRate float64 `split_words:"true"`
+	}
 }
 
 func main() {
@@ -44,10 +52,25 @@ func main() {
 	zc := zap.NewProductionConfig()
 	zc.Level = zap.NewAtomicLevelAt(zapcore.Level(e.LogLevel * -1))
 
-	log, _ := logging.NewZap(context.TODO(), zc)
+	log, ctx := logging.NewZap(context.TODO(), zc)
+
+	// configure open telemetry
+	if err := otel.Build(ctx, otel.Options{
+		Enabled:     e.Otel.Enabled,
+		ServiceName: "cso-proxy",
+		Environment: "",
+		SampleRate:  e.Otel.SampleRate,
+	}); err != nil {
+		log.Error(err, "failed to configure OpenTelemetry")
+		os.Exit(1)
+		return
+	}
+
+	// configure prometheus
+	prom := metrics.MustNewDefault(ctx)
 
 	router := mux.NewRouter().UseEncodedPath()
-	router.Use(handlers.ProxyHeaders, logging.Middleware(log))
+	router.Use(handlers.ProxyHeaders, logging.Middleware(log), otel.Middleware(), metrics.Middleware())
 	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK"))
 	}).Methods(http.MethodGet)
@@ -63,6 +86,7 @@ func main() {
 	router.PathPrefix("/cso/v1/repository/").
 		Handler(middleware).
 		Methods(http.MethodGet)
+	router.Handle("/metrics", prom)
 
 	serverless.NewBuilder(router).
 		WithPort(e.Port).
