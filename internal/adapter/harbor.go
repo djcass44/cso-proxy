@@ -22,11 +22,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/djcass44/cso-proxy/internal/adapter/harbor"
-	"github.com/djcass44/go-utils/pkg/httputils"
+	"github.com/djcass44/go-utils/utilities/httputils"
+	"github.com/go-logr/logr"
 	"github.com/quay/container-security-operator/secscan"
 	"github.com/quay/container-security-operator/secscan/quay"
-	log "github.com/sirupsen/logrus"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -67,53 +67,52 @@ func (*Harbor) Capabilities(uri *url.URL) *quay.AppCapabilities {
 }
 
 func (h *Harbor) ManifestSecurity(ctx context.Context, path, digest string, opts Opts) (*secscan.Response, int, error) {
+	log := logr.FromContextOrDiscard(ctx).WithValues("Path", path, "Digest", digest)
 	bits := strings.SplitN(path, "/", 2)
 	namespace, reponame := bits[0], bits[1]
-	log.WithContext(ctx).WithFields(log.Fields{
-		"namespace": namespace,
-		"reponame":  reponame,
-		"digest":    digest,
-	}).Infof("fetching manifest information")
+	log.Info("fetching manifest information", "Namespace", namespace, "Repository", reponame)
 	reponame = url.PathEscape(reponame)
 	return h.vulnerabilityInfo(ctx, opts.URI, namespace, reponame, digest, opts.Features, opts.Vulnerabilities)
 }
 
 func (*Harbor) vulnerabilityInfo(ctx context.Context, uri, namespace, repository, reference string, showFeatures, showVulnerabilities bool) (*secscan.Response, int, error) {
+	log := logr.FromContextOrDiscard(ctx).WithValues("Namespace", namespace, "Repository", repository, "Reference", reference)
 	target := fmt.Sprintf("%s/api/v2.0/projects/%s/repositories/%s/artifacts/%s/additions/vulnerabilities", uri, namespace, repository, reference)
-	log.WithContext(ctx).Infof("targeting url: %s", target)
+	log.Info("targeting URL", "URL", target)
 	// prep the request
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
-		log.WithError(err).WithContext(ctx).Error("failed to prepare request")
+		log.Error(err, "failed to prepare request")
 		return nil, http.StatusInternalServerError, err
 	}
 	// execute the request
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.WithError(err).WithContext(ctx).Error("failed to execute request")
+		log.Error(err, "failed to execute request")
 		return nil, http.StatusInternalServerError, err
 	}
 	defer resp.Body.Close()
-	log.WithContext(ctx).Infof("registry responded with status: %s in %s", resp.Status, time.Since(start))
+	log = log.WithValues("Code", resp.StatusCode)
+	log.Info("registry responded", "Duration", time.Since(start))
 	// handle errors
 	if httputils.IsHTTPError(resp.StatusCode) {
-		log.WithContext(ctx).Warningf("request failed with code: %d", resp.StatusCode)
+		log.Info("request failed with unexpected status code")
 		return nil, resp.StatusCode, fmt.Errorf("request failed: %s", resp.Status)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.WithError(err).WithContext(ctx).Error("failed to read response body")
+		log.Error(err, "failed to read response body")
 		return nil, resp.StatusCode, err
 	}
 	var report harbor.Response
 	if err := json.Unmarshal(body, &report); err != nil {
-		log.WithError(err).WithContext(ctx).Error("failed to unmarshal response")
+		log.Error(err, "failed to unmarshal response")
 		return nil, http.StatusInternalServerError, err
 	}
 	packages := map[string][]*secscan.Vulnerability{}
 	for k, v := range report {
-		log.WithContext(ctx).Infof("reading report: '%s'", k)
+		log.Info("reading report", "Key", k)
 		for _, f := range v.Vulnerabilities {
 			name := fmt.Sprintf("%s:%s", f.Package, f.Version)
 			packages[name] = append(packages[name], &secscan.Vulnerability{

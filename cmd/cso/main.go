@@ -18,29 +18,36 @@
 package main
 
 import (
+	"context"
 	"github.com/djcass44/cso-proxy/internal/adapter"
 	"github.com/djcass44/cso-proxy/internal/api"
+	"github.com/djcass44/go-utils/logging"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/kelseyhightower/envconfig"
-	log "github.com/sirupsen/logrus"
 	"gitlab.com/autokubeops/serverless"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"net/http"
 )
 
 type environment struct {
-	Port int `envconfig:"PORT" default:"8080"`
+	Port     int `envconfig:"PORT" default:"8080"`
+	LogLevel int `split_words:"true"`
 }
 
 func main() {
 	var e environment
-	if err := envconfig.Process("cso", &e); err != nil {
-		log.WithError(err).Fatal("failed to read environment")
-		return
-	}
+	envconfig.MustProcess("cso", &e)
+
+	// configure logging
+	zc := zap.NewProductionConfig()
+	zc.Level = zap.NewAtomicLevelAt(zapcore.Level(e.LogLevel * -1))
+
+	log, _ := logging.NewZap(context.TODO(), zc)
 
 	router := mux.NewRouter().UseEncodedPath()
-	router.Use(handlers.ProxyHeaders)
+	router.Use(handlers.ProxyHeaders, logging.Middleware(log))
 	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK"))
 	}).Methods(http.MethodGet)
@@ -59,5 +66,6 @@ func main() {
 
 	serverless.NewBuilder(router).
 		WithPort(e.Port).
+		WithLogger(log).
 		Run()
 }

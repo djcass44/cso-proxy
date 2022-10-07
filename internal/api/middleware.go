@@ -20,7 +20,7 @@ package api
 import (
 	"fmt"
 	"github.com/djcass44/cso-proxy/internal/adapter"
-	"github.com/djcass44/go-utils/pkg/httputils"
+	"github.com/djcass44/go-utils/utilities/httputils"
 	"net/http"
 	"regexp"
 	"strings"
@@ -55,5 +55,5 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	httputils.ReturnJSON(w, code, resp)
+	httputils.ReturnJSON(r.Context(), w, code, resp)
 }

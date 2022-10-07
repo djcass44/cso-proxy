@@ -19,7 +19,7 @@ package api
 
 import (
 	"github.com/djcass44/cso-proxy/internal/adapter"
-	"github.com/djcass44/go-utils/pkg/httputils"
+	"github.com/djcass44/go-utils/utilities/httputils"
 	"net/http"
 )
 
@@ -40,5 +40,5 @@ func (c *Capabilities) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if uri.Scheme == "" {
 		uri.Scheme = "https"
 	}
-	httputils.ReturnJSON(w, http.StatusOK, c.dst.Capabilities(uri))
+	httputils.ReturnJSON(r.Context(), w, http.StatusOK, c.dst.Capabilities(uri))
 }
